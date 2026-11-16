@@ -1,13 +1,263 @@
 <!doctype html>
 <html lang="ko">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>모바일 OTP (TOTP 2단계 인증)</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="./src/main.jsx"></script>
-  </body>
+
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>모바일 OTP (TOTP 2FA) 체험 스튜디오 — RFC 6238</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+
+<body>
+  <div id="app" class="app-container">
+    <!-- 상단 네비게이션 & 헤더 -->
+    <header class="app-header">
+      <div class="brand">
+        <div class="brand-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+            stroke-linejoin="round">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+            <path d="m9 12 2 2 4-4" />
+          </svg>
+        </div>
+        <div class="brand-text">
+          <h1>모바일 OTP (TOTP 2단계 인증) 체험 스튜디오</h1>
+          <p class="subtitle">RFC 6238 / RFC 4648 표준 · 브라우저 내 Web Crypto API 100% 무전송(Zero-Transmission)</p>
+        </div>
+      </div>
+      <div class="header-badges">
+        <span class="status-pill secure">
+          <span class="status-dot pulse"></span>
+          무전송 격리 (Zero-Transmission)
+        </span>
+        <button id="btn-self-test" class="btn-ghost-sm" title="RFC 6238 공식 테스트 벡터 자가진단 실행">
+          🧪 표준 벡터 자가진단
+        </button>
+      </div>
+    </header>
+
+    <!-- 메인 2단 대시보드 레이아웃 -->
+    <main class="dashboard-grid">
+      <!-- [좌측 패널] 서비스 서버 & 2FA 등록 (발급자 역할) -->
+      <section class="card panel panel-issuer">
+        <div class="panel-header">
+          <div class="panel-tag">ROLE 01 · SERVICE ISSUER</div>
+          <h2>🏢 2FA 키 발급 및 QR 연동</h2>
+          <p class="panel-desc">스마트폰 인증기(Google / Microsoft Authenticator)에 등록할 비밀 키를 생성하고 QR 코드를 제공합니다.</p>
+        </div>
+
+        <!-- 계정 정보 입력 -->
+        <div class="form-group-row">
+          <div class="form-group">
+            <label for="input-issuer">발급자 (Issuer)</label>
+            <input type="text" id="input-issuer" class="text-input" value="Polytech-Sec" placeholder="예: Polytech-Sec"
+              autocomplete="off" spellcheck="false" />
+          </div>
+          <div class="form-group">
+            <label for="input-account">계정명 (Account)</label>
+            <input type="text" id="input-account" class="text-input" value="yr@security.kr"
+              placeholder="예: yr@security.kr" autocomplete="off" spellcheck="false" />
+          </div>
+        </div>
+
+        <!-- Base32 비밀 키 제어 -->
+        <div class="form-group">
+          <div class="label-with-meta">
+            <label for="display-secret">Base32 비밀 키 (160-bit Secret)</label>
+            <span class="meta-tag">CSPRNG crypto.getRandomValues</span>
+          </div>
+          <div class="secret-input-wrapper">
+            <input type="text" id="display-secret" class="text-input secret-input" readonly spellcheck="false" />
+            <button id="btn-copy-secret" class="btn-secondary" title="비밀 키 복사">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+              </svg>
+              <span>복사</span>
+            </button>
+          </div>
+          <div class="secret-actions">
+            <button id="btn-generate-secret" class="btn-primary-action">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
+              </svg>
+              <span>새 비밀 키 생성</span>
+            </button>
+            <span class="hint-text">키를 재발급하면 스마트폰 앱에도 다시 등록해야 합니다.</span>
+          </div>
+        </div>
+
+        <!-- QR 코드 뷰어 -->
+        <div class="qr-section">
+          <div class="qr-container-box">
+            <div id="qrcode-box" class="qrcode-canvas-wrapper"></div>
+            <div class="qr-guide">
+              <p class="qr-guide-title">스마트폰 인증기 앱으로 스캔</p>
+              <p class="qr-guide-desc">Google Authenticator, Microsoft Authenticator, 2FAS 등에서 <strong>[+]</strong> 버튼을
+                눌러 스캔하세요.</p>
+            </div>
+          </div>
+
+          <!-- otpauth:// URI 원문 뷰어 -->
+          <div class="uri-container">
+            <div class="uri-header">
+              <span class="uri-label">인증 표준 URI (otpauth://)</span>
+              <button id="btn-copy-uri" class="btn-text-sm">URI 복사</button>
+            </div>
+            <div id="display-uri" class="uri-text-box" title="클릭하여 복사"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- [우측 패널] 인증기 모니터 & 코드 검증 (Authenticator & 검증기 역할) -->
+      <section class="card panel panel-authenticator">
+        <div class="panel-header">
+          <div class="panel-tag">ROLE 02 · AUTHENTICATOR & VERIFIER</div>
+          <h2>📱 인증기 모니터 & 2FA 코드 검증</h2>
+          <p class="panel-desc">30초 주기로 계산된 실시간 OTP를 확인하고, 스마트폰에 뜬 번호를 입력해 인증을 검증합니다.</p>
+        </div>
+
+        <!-- 실시간 6자리 OTP 모니터 -->
+        <div class="otp-monitor-card">
+          <div class="otp-monitor-header">
+            <span class="otp-title">현재 유효한 실시간 OTP</span>
+            <span class="live-indicator">
+              <span class="status-dot"></span> LIVE SYNC
+            </span>
+          </div>
+
+          <div class="otp-display-container">
+            <div id="otp-code-display" class="otp-code-large" aria-live="polite">
+              <span class="otp-digit">0</span>
+              <span class="otp-digit">0</span>
+              <span class="otp-digit">0</span>
+              <span class="otp-divider"></span>
+              <span class="otp-digit">0</span>
+              <span class="otp-digit">0</span>
+              <span class="otp-digit">0</span>
+            </div>
+          </div>
+
+          <!-- 30초 실시간 카운트다운 게이지 -->
+          <div class="timer-section">
+            <div class="timer-info-row">
+              <span class="timer-label">다음 번호 갱신까지</span>
+              <span id="timer-seconds-badge" class="timer-seconds">30s</span>
+            </div>
+            <div class="progress-bar-track">
+              <div id="timer-progress-bar" class="progress-bar-fill" style="width: 100%;"></div>
+            </div>
+          </div>
+
+          <!-- 디버깅 & 동기화 상태 표시 -->
+          <div class="sync-debug-grid">
+            <div class="debug-item">
+              <span class="debug-label">Unix Timestamp</span>
+              <span id="debug-timestamp" class="debug-value">0</span>
+            </div>
+            <div class="debug-item">
+              <span class="debug-label">30초 카운터 (T = Time/30)</span>
+              <span id="debug-counter" class="debug-value">0</span>
+            </div>
+            <div class="debug-item">
+              <span class="debug-label">해시 알고리즘</span>
+              <span class="debug-value text-accent">HMAC-SHA1 (RFC 6238)</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2FA 코드 검증기 -->
+        <div class="verifier-card">
+          <h3 class="verifier-title">2단계 인증 코드 검증</h3>
+          <p class="verifier-desc">스마트폰 Authenticator 화면에 표시된 6자리 숫자를 입력해 인증을 시험해 보세요.</p>
+
+          <form id="form-verify" class="verifier-form" onsubmit="return false;">
+            <div class="input-with-button">
+              <input type="text" id="input-verify-code" class="text-input verify-code-input"
+                placeholder="6자리 숫자 입력 (예: 123456)" maxlength="7" inputmode="numeric" pattern="[0-9\s]*"
+                autocomplete="one-time-code" />
+              <button type="submit" id="btn-verify" class="btn-primary">
+                인증 확인
+              </button>
+            </div>
+
+            <!-- 시간 오차 보정 옵션 -->
+            <div class="drift-option">
+              <label class="toggle-switch">
+                <input type="checkbox" id="check-time-drift" checked />
+                <span class="toggle-slider"></span>
+              </label>
+              <div class="drift-text-group">
+                <span class="drift-title">±1 Step 허용 (앞뒤 30초 시간 오차 보정)</span>
+                <span class="drift-desc">클라이언트와 스마트폰 시계의 미세한 오차(최대 30초)를 허용하는 RFC 권장 옵션입니다.</span>
+              </div>
+            </div>
+          </form>
+
+          <!-- 판정 결과 배지 -->
+          <div id="verification-result-box" class="result-box hidden">
+            <div id="result-badge" class="result-badge success">
+              <span id="result-icon" class="result-icon">✅</span>
+              <div class="result-text-group">
+                <span id="result-status" class="result-status-text">인증 성공</span>
+                <span id="result-detail" class="result-detail-text">현재 시간 스텝과 정확히 일치합니다.</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- 자가진단 모달 다이얼로그 -->
+    <dialog id="modal-self-test" class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>🧪 RFC 6238 공식 테스트 벡터 자가진단</h3>
+          <button id="btn-close-modal" class="btn-close">&times;</button>
+        </div>
+        <div class="modal-body">
+          <p class="modal-desc">
+            RFC 6238 명세의 공식 표준 벡터 (Secret: <code>GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ</code>)를
+            브라우저의 <code>crypto.subtle</code>로 즉시 연산하여 일치 여부를 검증합니다.
+          </p>
+          <div id="self-test-results" class="self-test-list"></div>
+        </div>
+        <div class="modal-footer">
+          <button id="btn-run-self-test-again" class="btn-secondary">다시 검증</button>
+          <button id="btn-confirm-modal" class="btn-primary">닫기</button>
+        </div>
+      </div>
+    </dialog>
+
+    <!-- 하단 보안 안내 배너 (필수 요구사항) -->
+    <footer class="app-footer">
+      <div class="security-banner">
+        <div class="security-icon">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+            <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+          </svg>
+        </div>
+        <p class="security-text">
+          <strong>사이버보안 체크포인트:</strong>
+          XSS 탈취 방지를 위해 비밀 키를 스토리지(localStorage / sessionStorage)에 저장하지 않고
+          메모리에서만 연산합니다. 브라우저 외부 API 호출이 전혀 없는 100% Zero-Transmission 구조입니다.
+        </p>
+      </div>
+    </footer>
+
+    <!-- 토스트 알림 컨테이너 -->
+    <div id="toast" class="toast hidden"></div>
+  </div>
+
+  <!-- 로컬 클라이언트 QR 라이브러리 (외부 CDN/API 전송 0건 보장) -->
+  <script src="./qrcode.min.js"></script>
+  <!-- 애플리케이션 진입점 -->
+  <script type="module" src="./src/app.js"></script>
+</body>
+
 </html>

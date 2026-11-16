@@ -7,11 +7,14 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "oxlint",
+    "test": "node test/rfc6238.test.js && node test/e2e.test.js",
     "preview": "vite preview"
   },
   "dependencies": {
     "lucide-react": "^1.16.0",
+    "qrcode": "^1.5.4",
     "qrcode.react": "^4.2.0",
+    "qrcodejs": "^1.0.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
   },
