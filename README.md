@@ -61,8 +61,8 @@
   npm run build
   ```
 - **배포 링크**:
-  - Netlify 배포 URL: *(배포 후 입력)*
-  - GitHub Pages 배포 URL: *(배포 후 입력)*
+  - Netlify 배포 URL: *(Netlify 배포 후 입력)*
+  - GitHub Pages 배포 URL: https://heoyr123.github.io/26-w11-mobile-otp/
 
 ---
 
